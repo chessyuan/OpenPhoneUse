@@ -4,6 +4,12 @@ All notable changes to OpenPhoneUse are listed here, newest first. The format fo
 
 ## [Unreleased]
 
+## [0.0.7] - 2026-11-15
+
+- **Any OpenAI-compatible server.** A new "Other" provider takes a base URL and an API key. Presets fill in OpenRouter, Groq, Mistral, Together, DeepSeek, Ollama and LM Studio, or you can enter any server that speaks Chat Completions, then pick a model from the list it offers. A local server may need no key. The model must support tool calling. Plain http works only for a server on the phone itself; anything else needs https.
+- **Routines follow the app language.** The message a routine sends when it starts on its own used Korean for its fixed lines, so an English phone saw Korean at the start and end of the routine's conversation. Those lines now follow the app language.
+- **Choose how soon a routine may run again.** Routines that start on a place, a notification, a device or a calendar event have a "Run again after" choice: every time, 5 minutes, 15 minutes, 1 hour or once a day. Before, it was always one hour. Running a routine by hand with "Run now" no longer starts the wait. A routine that starts on a notification or a device and calls the model still waits at least 5 minutes, so a busy app cannot start runs back to back.
+
 ## [0.0.6] - 2026-11-13
 
 - **No texts, calls, call log or contacts permissions.** Galaxy phones refused to install the app as a suspected phishing app ("악성 앱으로 의심"), and those permissions next to accessibility are what phishing apps ask for. The APK now leaves them out. Calls, texts and contacts go through the phone's own Phone, Messages and Contacts apps on screen, and the `call`, `send_sms`, `sms_search`, `find_contact`, `recent_calls` and `add_contact` tools are offered only in a build that declares those permissions.
