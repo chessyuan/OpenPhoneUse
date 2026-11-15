@@ -126,6 +126,7 @@ class RoutineJsonTest {
             action = RoutineAction.Ask("무음", true, listOf(RoutineStep("무음 켜기", true))),
             enabled = false,
             lastRunAt = 1_700_000_000_000,
+            cooldownFrom = 1_699_000_000_000,
             lastResult = "무음으로 했어요",
             conversationId = 12,
             sendWithoutConfirm = true,

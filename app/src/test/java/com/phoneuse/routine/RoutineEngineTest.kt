@@ -22,7 +22,7 @@ class RoutineEngineTest {
         conditions: Conditions = Conditions(),
         lastRunAt: Long? = null,
         id: Long = 1,
-    ) = Routine(id = id, title = "t", trigger = trigger, conditions = conditions, action = action, lastRunAt = lastRunAt)
+    ) = Routine(id = id, title = "t", trigger = trigger, conditions = conditions, action = action, lastRunAt = lastRunAt, cooldownFrom = lastRunAt)
 
     private val due = RoutineEvent.TimeDue(1)
 

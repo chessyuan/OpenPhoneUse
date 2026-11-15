@@ -92,6 +92,8 @@ data class Routine(
     val action: RoutineAction,
     val enabled: Boolean = true,
     val lastRunAt: Long? = null,
+    /** The last run a trigger started; the cooldown counts from it. "지금 실행" does not set it. */
+    val cooldownFrom: Long? = null,
     val lastResult: String? = null,
     val conversationId: Long? = null,
     val sendWithoutConfirm: Boolean = false,

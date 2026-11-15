@@ -77,6 +77,8 @@ object RoutineJson {
             id = o.long("id") ?: 0,
             enabled = o.bool("enabled") ?: true,
             lastRunAt = o.long("last_run_at"),
+            // 0 = no triggered run yet. Routines saved before cooldown_from existed counted every run.
+            cooldownFrom = (o.long("cooldown_from") ?: o.long("last_run_at"))?.takeIf { it > 0 },
             lastResult = o.str("last_result"),
             conversationId = o.long("conversation_id"),
             sendWithoutConfirm = o.bool("send_without_confirm") ?: false,
@@ -207,6 +209,7 @@ object RoutineJson {
         put("id", r.id)
         put("enabled", r.enabled)
         r.lastRunAt?.let { put("last_run_at", it) }
+        put("cooldown_from", r.cooldownFrom ?: 0L)
         r.lastResult?.let { put("last_result", it) }
         r.conversationId?.let { put("conversation_id", it) }
         put("send_without_confirm", r.sendWithoutConfirm)

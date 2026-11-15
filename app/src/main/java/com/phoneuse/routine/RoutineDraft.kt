@@ -45,7 +45,8 @@ data class RoutineDraft(
     val deviceDetail: String = "",
     val eventMinutes: Int = 60,
     val weekdaysOnly: Boolean = false,
-    val onceADay: Boolean = false,
+    /** Minutes before a trigger may run it again: 0 = every time, [Conditions.ONCE_A_DAY] = once a day. */
+    val cooldownMin: Int = Conditions.DEFAULT_COOLDOWN_MIN,
     val onlyUnlocked: Boolean = false,
     val action: ActionKind = ActionKind.ASK,
     val prompt: String = "",
@@ -84,11 +85,7 @@ data class RoutineDraft(
         val conditions = old.copy(
             days = if (weekdaysOnly) WEEKDAYS else old.days?.takeIf { it != WEEKDAYS },
             onlyWhenUnlocked = onlyUnlocked,
-            cooldownMin = when {
-                onceADay -> Conditions.ONCE_A_DAY
-                old.cooldownMin >= Conditions.ONCE_A_DAY -> Conditions.DEFAULT_COOLDOWN_MIN
-                else -> old.cooldownMin
-            },
+            cooldownMin = cooldownMin,
         )
         val draft = (base ?: Routine(title = "", trigger = t, action = a)).copy(
             title = title.trim().ifEmpty { defaultTitle(t, a) },
@@ -114,7 +111,7 @@ data class RoutineDraft(
             var d = RoutineDraft(
                 title = r.title,
                 weekdaysOnly = r.conditions.days == WEEKDAYS,
-                onceADay = r.conditions.cooldownMin >= Conditions.ONCE_A_DAY,
+                cooldownMin = r.conditions.cooldownMin,
                 onlyUnlocked = r.conditions.onlyWhenUnlocked,
                 sendWithoutConfirm = r.sendWithoutConfirm,
                 sendTo = r.sendTo.orEmpty(),
@@ -161,7 +158,7 @@ object RoutineTemplates {
         RoutineTemplate(
             tr("Commute music", "퇴근길 음악"), tr("When I leave work · my usual playlist in the music app", "회사를 떠나면 · 음악 앱에서 늘 듣던 재생목록"),
             RoutineDraft(
-                title = tr("Commute music", "퇴근길 음악"), trigger = TriggerKind.PLACE, placeName = tr("Work", "회사"), edge = PlaceEdge.EXIT, weekdaysOnly = true, onceADay = true,
+                title = tr("Commute music", "퇴근길 음악"), trigger = TriggerKind.PLACE, placeName = tr("Work", "회사"), edge = PlaceEdge.EXIT, weekdaysOnly = true, cooldownMin = Conditions.ONCE_A_DAY,
                 prompt = tr("Open the music app and play the playlist I listen to most.", "음악 앱을 열고 내가 자주 듣는 재생목록을 틀어줘."), needsDevice = true,
                 steps = listOf(RoutineStep(tr("Open the music app", "음악 앱 열기"), true), RoutineStep(tr("Play the playlist", "재생목록 틀기"), true)),
             ),
@@ -169,7 +166,7 @@ object RoutineTemplates {
         RoutineTemplate(
             tr("Silent mode at work", "회사 도착 시 무음"), tr("When I arrive at work · silent mode, today's meetings", "회사에 도착하면 · 무음, 오늘 회의 알려주기"),
             RoutineDraft(
-                title = tr("Work mode", "일 모드"), trigger = TriggerKind.PLACE, placeName = tr("Work", "회사"), edge = PlaceEdge.ENTER, weekdaysOnly = true, onceADay = true,
+                title = tr("Work mode", "일 모드"), trigger = TriggerKind.PLACE, placeName = tr("Work", "회사"), edge = PlaceEdge.ENTER, weekdaysOnly = true, cooldownMin = Conditions.ONCE_A_DAY,
                 prompt = tr("Switch the phone to silent (Do Not Disturb) and tell me when today's meetings are.", "폰을 무음(방해 금지)으로 바꾸고, 오늘 회의 시간을 알려줘."), needsDevice = true,
                 steps = listOf(RoutineStep(tr("Turn on silent mode", "무음 켜기"), true), RoutineStep(tr("Tell me today's meeting times", "오늘 회의 시간 알려주기"))),
             ),
@@ -177,7 +174,7 @@ object RoutineTemplates {
         RoutineTemplate(
             tr("Plan tomorrow when charging", "충전 시작하면 내일 일정 정리"), tr("When charging starts (once a day) · summary of tomorrow's schedule", "충전을 시작하면 (하루 한 번) · 내일 일정 요약"),
             RoutineDraft(
-                title = tr("Prep for tomorrow", "내일 준비"), trigger = TriggerKind.DEVICE, deviceKind = DeviceKind.CHARGER_CONNECTED, onceADay = true,
+                title = tr("Prep for tomorrow", "내일 준비"), trigger = TriggerKind.DEVICE, deviceKind = DeviceKind.CHARGER_CONNECTED, cooldownMin = Conditions.ONCE_A_DAY,
                 prompt = tr("Lay out tomorrow's schedule in time order and tell me if there is anything to prepare.", "내일 일정을 시간순으로 정리하고, 준비할 것이 있으면 알려줘."),
                 steps = listOf(RoutineStep(tr("Organize tomorrow's schedule", "내일 일정 정리"))),
             ),
@@ -193,7 +190,7 @@ object RoutineTemplates {
         RoutineTemplate(
             tr("Sort parcel messages", "택배 문자 오면 정리"), tr("When a '택배' notification arrives · courier, expected arrival, what to do", "'택배' 알림이 오면 · 택배사, 도착 예정, 할 일"),
             RoutineDraft(
-                title = tr("Parcel summary", "택배 정리"), trigger = TriggerKind.NOTIFICATION, notifKeyword = "택배", onceADay = false,
+                title = tr("Parcel summary", "택배 정리"), trigger = TriggerKind.NOTIFICATION, notifKeyword = "택배",
                 prompt = tr("Sort out this parcel notification: courier, expected arrival, and what I need to do.", "이 택배 알림을 정리해줘: 택배사, 도착 예정, 내가 할 일."),
                 steps = listOf(RoutineStep(tr("Summarize parcel info", "택배 정보 정리"))),
             ),

@@ -374,7 +374,9 @@ class RoutineSystem private constructor(private val app: Context) : RoutineHost 
             return
         }
         val now = System.currentTimeMillis()
-        if (r.id != 0L) store.update(r.id) { it.copy(lastRunAt = now) }
+        // A run the user started by hand is a try, not a trigger: it starts no cooldown.
+        val triggered = event != RoutineEvent.Manual
+        if (r.id != 0L) store.update(r.id) { if (triggered) it.copy(lastRunAt = now, cooldownFrom = now) else it.copy(lastRunAt = now) }
         when (val a = r.action) {
             is RoutineAction.Notify -> {
                 post(r, a.text)

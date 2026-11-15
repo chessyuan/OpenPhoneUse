@@ -57,11 +57,13 @@ import com.phoneuse.phone.GeoPlace
 import com.phoneuse.phone.LocationReply
 import com.phoneuse.phone.LocationTool
 import com.phoneuse.routine.ActionKind
+import com.phoneuse.routine.Conditions
 import com.phoneuse.routine.DeviceKind
 import com.phoneuse.routine.PlaceEdge
 import com.phoneuse.routine.PlaceResolver
 import com.phoneuse.routine.Routine
 import com.phoneuse.routine.RoutineDraft
+import com.phoneuse.routine.RoutineEngine
 import com.phoneuse.routine.RoutineParse
 import com.phoneuse.routine.RoutineSystem
 import com.phoneuse.routine.RoutineText
@@ -82,6 +84,13 @@ import java.time.DayOfWeek
 private val CLOCK = Regex("""([01]?\d|2[0-3]):([0-5]\d)""")
 private val RADII = listOf(150, 200, 300, 500, 1000)
 private val EVENT_MINUTES = listOf(15, 30, 60, 90, 120)
+private val COOLDOWNS = listOf(0, 5, 15, Conditions.DEFAULT_COOLDOWN_MIN, Conditions.ONCE_A_DAY)
+
+private fun cooldownLabel(m: Int): String = when {
+    m <= 0 -> tr("Every time", "매번")
+    m >= Conditions.ONCE_A_DAY -> tr("Once a day", "하루 한 번")
+    else -> RoutineText.minutes(m)
+}
 
 /**
  * Board RoutineBuilder: 언제 (five trigger chips and each one's fields; a place on the map with its radius),
@@ -281,8 +290,25 @@ fun RoutineBuilderScreen(
             Cap(tr("Conditions", "조건"))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Chip(tr("Weekdays only", "평일만"), d.weekdaysOnly, { d = d.copy(weekdaysOnly = !d.weekdaysOnly) })
-                Chip(tr("Once a day", "하루 한 번"), d.onceADay, { d = d.copy(onceADay = !d.onceADay) })
                 Chip(tr("Only when unlocked", "잠금 풀려 있을 때"), d.onlyUnlocked, { d = d.copy(onlyUnlocked = !d.onlyUnlocked) })
+            }
+            // A time trigger fires once per set time; the others can fire again soon.
+            if (d.trigger != TriggerKind.TIME) {
+                Cap(tr("Run again after", "다시 실행 간격"))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    val choices = (COOLDOWNS + d.cooldownMin).distinct().sorted()
+                    for (m in choices) Chip(cooldownLabel(m), d.cooldownMin == m, { d = d.copy(cooldownMin = m) })
+                }
+                val floor = (d.trigger == TriggerKind.NOTIFICATION || d.trigger == TriggerKind.DEVICE) && d.action != ActionKind.NOTIFY
+                Text(
+                    if (floor && d.cooldownMin < RoutineEngine.EVENT_MIN_COOLDOWN_MIN) {
+                        tr("Routines started by a notification or device that use the model wait at least ${RoutineEngine.EVENT_MIN_COOLDOWN_MIN} minutes between runs.", "알림이나 기기로 시작해 모델을 쓰는 루틴은 실행 사이에 최소 ${RoutineEngine.EVENT_MIN_COOLDOWN_MIN}분을 기다려요.")
+                    } else {
+                        tr("How long before the same trigger can run it again. Run now doesn't count.", "같은 트리거로 다시 실행되기까지의 시간이에요. '지금 실행'은 세지 않아요.")
+                    },
+                    fontSize = 12.5.sp,
+                    color = c.textSub,
+                )
             }
 
             Cap(tr("What to do", "할 일"))

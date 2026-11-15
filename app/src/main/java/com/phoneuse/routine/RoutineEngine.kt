@@ -99,7 +99,7 @@ object RoutineEngine {
         if (!from.isAfter(to)) !t.isBefore(from) && t.isBefore(to) else !t.isBefore(from) || t.isBefore(to)
 
     private fun coolingDown(routine: Routine, now: ZonedDateTime): Boolean {
-        val last = routine.lastRunAt ?: return false
+        val last = routine.cooldownFrom ?: return false
         // A chatty app or a flapping connection must not start model runs back to back.
         val eventDriven = routine.trigger is Trigger.Notification || routine.trigger is Trigger.Device
         val cooldown = if (eventDriven && routine.action !is RoutineAction.Notify) {

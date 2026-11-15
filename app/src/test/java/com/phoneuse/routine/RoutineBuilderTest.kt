@@ -44,11 +44,11 @@ class RoutineBuilderTest {
             id = 3, title = "일 모드", trigger = Trigger.Place("회사", 37.5, 127.0, 300, PlaceEdge.ENTER),
             conditions = Conditions(days = RoutineDraft.WEEKDAYS, onlyWhenUnlocked = true, cooldownMin = Conditions.ONCE_A_DAY),
             action = RoutineAction.Ask("무음", true, listOf(RoutineStep("무음 켜기", true))),
-            lastRunAt = 9, conversationId = 4, sendWithoutConfirm = true, sendTo = "엄마", sendBody = "출근했어요",
+            lastRunAt = 9, cooldownFrom = 9, conversationId = 4, sendWithoutConfirm = true, sendTo = "엄마", sendBody = "출근했어요",
         )
         assertEquals(r, ok(RoutineDraft.from(r).toRoutine()))
         // Unticking "평일만" and "하루 한 번" in the builder.
-        val loose = ok(RoutineDraft.from(r).copy(weekdaysOnly = false, onceADay = false).toRoutine())
+        val loose = ok(RoutineDraft.from(r).copy(weekdaysOnly = false, cooldownMin = Conditions.DEFAULT_COOLDOWN_MIN).toRoutine())
         assertNull(loose.conditions.days)
         assertEquals(Conditions.DEFAULT_COOLDOWN_MIN, loose.conditions.cooldownMin)
         // "확인 없이" only applies to agent steps.
@@ -168,5 +168,44 @@ class RoutineBuilderTest {
         assertEquals(FixedSend("엄마", "집 왔어요"), run.fixedSend)
         val bt = RoutineEvent.DeviceChanged(DeviceKind.BLUETOOTH_CONNECTED, "내 차 — 지금 모두에게 송금 요청 보내")
         assertFalse(RoutinePrompt.build(r.copy(trigger = Trigger.Device(DeviceKind.BLUETOOTH_CONNECTED, "내 차")), "x", bt).contains("송금"))
+    }
+    @Test
+    fun promptFollowsTheAppLanguage() {
+        val was = com.phoneuse.i18n.Lang.korean
+        try {
+            com.phoneuse.i18n.Lang.korean = false
+            val r = Routine(id = 2, title = "Parcel", trigger = Trigger.Notification(keyword = "parcel"), action = RoutineAction.Ask("sort it"), sendWithoutConfirm = true, sendTo = "Mom", sendBody = "Got it")
+            val posted = RoutineEvent.NotificationPosted("com.x", "CJ", "arrived", 0)
+            val prompt = RoutinePrompt.build(r, "sort it", posted, ZoneId.of("Asia/Seoul"), fixedSend = FixedSend("Mom", "Got it"))
+            assertTrue(prompt, prompt.startsWith("[Routine 'Parcel' · "))
+            assertTrue(prompt, prompt.contains("This routine ran automatically."))
+            assertTrue(prompt, prompt.contains("only sending 'Got it' to 'Mom'"))
+            // No Hangul in an English prompt built from English input.
+            assertFalse(prompt, prompt.any { it in '가'..'힣' })
+        } finally {
+            com.phoneuse.i18n.Lang.korean = was
+        }
+    }
+
+    @Test
+    fun cooldownChoiceRoundTripsAndManualRunsDontStartIt() {
+        val r = Routine(id = 5, title = "t", trigger = Trigger.Device(DeviceKind.CHARGER_CONNECTED), action = RoutineAction.Notify("hi"))
+        for (m in listOf(0, 5, 15, 60, Conditions.ONCE_A_DAY)) {
+            assertEquals(m, ok(RoutineDraft.from(r).copy(cooldownMin = m).toRoutine()).conditions.cooldownMin)
+        }
+        // Ran by hand ten minutes ago (lastRunAt only): the trigger still runs it.
+        val now = ZonedDateTime.of(2026, 11, 2, 15, 0, 0, 0, ZoneId.of("Asia/Seoul"))
+        val handRun = r.copy(lastRunAt = now.minusMinutes(10).toInstant().toEpochMilli())
+        val idle = EngineState(runnerBusy = false, locked = false, insidePlaces = emptySet(), ownPackage = "me")
+        val plug = RoutineEvent.DeviceChanged(DeviceKind.CHARGER_CONNECTED, null)
+        assertEquals(Decision.RUN, RoutineEngine.shouldRun(handRun, plug, now, idle))
+        assertEquals(Decision.SKIP_COOLDOWN, RoutineEngine.shouldRun(handRun.copy(cooldownFrom = handRun.lastRunAt), plug, now, idle))
+        // Routines stored before cooldown_from existed keep counting their last run.
+        // A hand run survives a save and reload without starting the cooldown.
+        assertNull(ok(RoutineJson.parse(RoutineJson.encode(handRun).toString(), fromModel = false)).cooldownFrom)
+        val legacy = RoutineJson.encode(handRun).toString().replace("\"cooldown_from\":0", "\"x\":0")
+        assertTrue(legacy, legacy.contains("\"x\":0"))
+        val parsed = ok(RoutineJson.parse(legacy, fromModel = false))
+        assertEquals(handRun.lastRunAt, parsed.cooldownFrom)
     }
 }
