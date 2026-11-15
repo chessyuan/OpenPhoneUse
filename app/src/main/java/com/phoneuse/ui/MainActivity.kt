@@ -279,6 +279,8 @@ internal suspend fun loadAccount(settings: SettingsStore): AccountInfo {
         email = plan?.email,
         hasApiKey = settings.providerKey(mode).first().isNotBlank(),
         planEnabled = plan?.canUsePlan == true,
+        compatibleBaseUrl = settings.compatibleBaseUrl.first(),
+        hasModel = settings.model.first().isNotBlank(),
     )
 }
 
@@ -419,6 +421,7 @@ private fun AppRoot(
         val base = ModelChoices(
             presets = ModelProviders.presets(mode), defaultModel = ModelProviders.defaultModel(mode),
             fastSupported = ModelProviders.supportsFast(mode),
+            autoSupported = mode != com.phoneuse.app.AuthMode.COMPATIBLE,
         )
         value = base
         // The plan sign-in lists the account's own models.
@@ -436,10 +439,12 @@ private fun AppRoot(
         } else {
             settings.providerKey(mode).first()
         }
-        if (key.isBlank()) return@produceState
+        // A compatible server is reached by its address; a local one may take no key.
+        val baseUrl = if (mode == com.phoneuse.app.AuthMode.COMPATIBLE) settings.compatibleBaseUrl.first() else ""
+        if (if (mode == com.phoneuse.app.AuthMode.COMPATIBLE) baseUrl.isBlank() else key.isBlank()) return@produceState
         val shown = value
         value = try {
-            val listed = ModelProviders.listModels(mode, key, AppGraph.http)
+            val listed = ModelProviders.listModels(mode, key, AppGraph.http, baseUrl)
             // A newer model of the default's family becomes the default, unless one was picked.
             settings.rememberListedModels(mode, listed)
             shown.copy(listed = listed, defaultModel = ModelProviders.upgrades(mode, listed).first ?: shown.defaultModel)
@@ -809,7 +814,7 @@ private fun AppRoot(
             effort = effort,
             onModel = { scope.launch { settings.setModel(it) } },
             auto = modelAuto,
-            onAuto = { scope.launch { settings.setModelAuto() } },
+            onAuto = if (modelChoices.autoSupported) ({ scope.launch { settings.setModelAuto() } }) else null,
             onFast = { scope.launch { settings.setFastMode(it) } },
             onEffort = { scope.launch { settings.setReasoningEffort(it) } },
             onDismiss = { sheetOpen = false },

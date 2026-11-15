@@ -42,7 +42,7 @@
 
 - **只靠手机就能运行。** 无需电脑、root、ADB 或 Shizuku。打开一项无障碍服务并登录模型即可。
 - **直接使用你已安装的应用。** 它同时读取无障碍树和屏幕截图，所以游戏、地图、图表这类绘制出来的内容同样能处理。
-- **模型由你选。** 你的 ChatGPT 套餐、OpenAI API 密钥、Claude、Grok 或 Gemini 都可以。
+- **模型由你选。** 你的 ChatGPT 套餐、OpenAI API 密钥、Claude、Grok、Gemini，或任何 OpenAI 兼容服务器（OpenRouter、Groq、Ollama 等）都可以。
 - **先问再做。** 付款和更改安全设置一定会先询问。删除时，除非是你亲自要求、可恢复的那一项，否则都会询问；发送时，除非你亲自指定了收件人和内容，否则也会询问。它从不输入密码，而是交给你自己输入。
 
 **基准测试 94.5 / 100。** 这是 9 个类别、31 个任务的得分，单个任务耗时中位数为 42 秒（GPT-6.1 Terra，快速模式，Android 模拟器，2026-11-03，在本次发布之前的版本上运行一次）。[查看评分方式](#基准测试)。
@@ -101,7 +101,7 @@
 
 1. **安装 APK：** 打开下载的文件，Android 询问时，允许从该来源安装。Play 商店上没有这款应用。如果提示未安装应用，请先卸载之前的测试版本。Google Play 保护机制可能会先提示建议扫描应用，再提示已拦截有害应用。Google 没有说明原因；OpenPhoneUse 会请求无障碍操控等较高权限。请自行判断：可以用发布页的 `OpenPhoneUse.apk.sha256` 文件核对 APK、阅读源代码或自行构建。如要继续，请在警告页选择继续安装，并保持 Play 保护机制开启。
 2. **开启操控权限：** **设置 → 无障碍 → OpenPhoneUse** → 开启。在 Android 13 及更高版本上，直接安装 APK 的应用通常会因“受限制的设置”而无法打开此开关（显示为灰色）。遇到这种情况，请前往 **设置 → 应用 → OpenPhoneUse → 右上角 ⋮ → 允许受限制的设置**，然后再次开启。
-3. **登录：** 在应用的设置中选择 **Continue with ChatGPT** 以使用你的套餐，或粘贴 OpenAI、Claude、Grok 或 Gemini 的 API 密钥。
+3. **登录：** 在应用的设置中选择 **Continue with ChatGPT** 以使用你的套餐，粘贴 OpenAI、Claude、Grok 或 Gemini 的 API 密钥，或在 **Other** 中填写 OpenAI 兼容服务器。
 4. **试着提个请求**，比如"打开勿扰模式"或"比较 Amazon、Best Buy 和 Walmart 上 AirPods Pro 3 的当前价格"。
 
 要求：Android 11 或更高版本，以及 ChatGPT 账号或上述任一提供商的 API 密钥。如需自行构建，请参阅[从源码构建](#从源码构建)。
@@ -194,7 +194,7 @@ python bench/score.py report RUN_DIR... --judge JUDGE_DIR --out report.md
 | 需要电脑、ADB 或 root | 否 | 电脑和 ADB | Shizuku（需通过 ADB 或 root 启动）或 root | 大多数功能不需要 | 否 |
 | 能理解任何应用的界面 | 是，无障碍树加截图（拒绝操作禁止屏幕截取的应用） | 是，通过截图或 UI 转储 | 视工具而定，多为脚本 | 否，按录制的规则执行 | 仅限支持的应用和功能 |
 | 高风险操作前先询问 | 是，金钱、安全一律确认；删除除非是你亲自要求、可恢复的那一项；发送除非你亲自指定了收件人和内容 | 视工具而定 | 视工具而定 | 编写宏时自行决定 | 是，限其自身功能 |
-| 可选择的模型 | ChatGPT 套餐、OpenAI API、Claude、Grok、Gemini | 视工具而定 | 视工具而定 | 无 | 厂商自家模型 |
+| 可选择的模型 | ChatGPT 套餐、OpenAI API、Claude、Grok、Gemini、OpenAI 兼容 API | 视工具而定 | 视工具而定 | 无 | 厂商自家模型 |
 | 开源 | 是（MIT） | 多数是 | 视工具而定 | 多数不是 | 否 |
 
 由电脑驱动的智能体适合研究和批量运行多台设备；宏适合固定、重复的任务。OpenPhoneUse 瞄准的是两者之间：一部手机、几乎任何应用、用自然语言提出请求，无需额外设备。
@@ -214,10 +214,11 @@ OpenPhoneUse 的设计原则是先问再做。付款和安全设置更改总会�
 OpenPhoneUse 不需要 root、ADB、Shizuku 或电脑。它只使用 Android 公开的无障碍服务 API，由你自己在设置中开启。（基准测试运行器会用电脑上的 adb 来准备和评分任务，但应用本身不用。）
 
 ### 支持哪些 AI 模型？
-OpenPhoneUse 支持 ChatGPT 套餐、OpenAI API，以及 Claude、Grok 和 Gemini 的模型。
+OpenPhoneUse 支持 ChatGPT 套餐、OpenAI API，Claude、Grok 和 Gemini 的模型，以及任何 OpenAI 兼容服务器。
 - **ChatGPT 套餐：** 用 ChatGPT 登录，消耗你套餐的额度（OpenAI 面向应用的 "Sign in with ChatGPT"）。应用会列出你的账号可用的模型，例如 GPT-6.1 Terra、GPT-6.1 Sol 和 GPT-6 Astra。
 - **OpenAI API 密钥：** 同样的模型，按 token 计费。
 - **Claude、Grok 或 Gemini：** 粘贴对应提供商的 API 密钥。
+- **Other（OpenAI 兼容）：** 从 OpenRouter、Groq、Mistral、Together、DeepSeek、Ollama、LM Studio 中选择，或填写服务器的基础 URL，再从服务器列出的模型中选择。本地服务器可以不填密钥。模型必须支持工具调用；如果模型不能读图片，请把发送给模型的屏幕内容改为仅文本。http 只能用于手机本机上的服务器（localhost），其他服务器需要 https。
 
 默认由 GPT-6.1 Terra 在开启快速模式下做决策，重复性的屏幕操作交给更轻量的辅助模型。模型、推理强度和快速模式都可以在应用里修改。OpenAI API 密钥和 ChatGPT 套餐都可以使用快速模式。对某些模型或账户，它可能会被拒绝，这时应用会去掉它再发送请求。
 

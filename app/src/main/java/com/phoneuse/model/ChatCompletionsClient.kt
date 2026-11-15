@@ -29,7 +29,8 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * An OpenAI-compatible Chat Completions backend reached with an API key: xAI (Grok) and Google AI Studio (Gemini).
+ * An OpenAI-compatible Chat Completions backend: xAI (Grok), Google AI Studio (Gemini) and any server the user
+ * enters ([com.phoneuse.app.AuthMode.COMPATIBLE]); a blank API key sends no Authorization header (local servers).
  * Streams text, function tools and images; no hosted web search ([ModelOptions.webSearch] and [ModelOptions.fast]
  * are ignored). Gemini's thought signatures ride on each call's [InputItem.FunctionCall.extra].
  */
@@ -166,7 +167,7 @@ class ChatCompletionsClient(
     private suspend fun send(body: String, onTextDelta: (String) -> Unit): ModelTurn {
         val request = Request.Builder()
             .url(endpoint.baseUrl + "chat/completions")
-            .header("Authorization", "Bearer $apiKey")
+            .apply { if (apiKey.isNotBlank()) header("Authorization", "Bearer $apiKey") }
             .post(body.toRequestBody(JSON_MEDIA_TYPE))
             .build()
         try {
@@ -328,7 +329,7 @@ class ChatCompletionsClient(
         fun listModels(endpoint: Endpoint, apiKey: String, http: OkHttpClient): List<String> {
             val request = Request.Builder()
                 .url(endpoint.baseUrl + "models")
-                .header("Authorization", "Bearer $apiKey")
+                .apply { if (apiKey.isNotBlank()) header("Authorization", "Bearer $apiKey") }
                 .get()
                 .build()
             try {

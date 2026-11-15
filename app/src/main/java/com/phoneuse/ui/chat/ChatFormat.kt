@@ -20,6 +20,8 @@ private val MONTH_DAY_EN = DateTimeFormatter.ofPattern("MMM d", Locale.ENGLISH)
 
 /** "gpt-6.1-terra" → "GPT-6.1 Terra"; ids that are not `gpt-<version>-…` are shown as they are. */
 fun modelDisplayName(id: String): String {
+    // No model yet: an OpenAI-compatible server before one is picked.
+    if (id.isBlank()) return com.phoneuse.i18n.tr("Choose a model", "모델 선택")
     val parts = id.trim().split('-').filter { it.isNotEmpty() }
     // "claude-opus-5-5" → "Claude Opus 5.5" (version numbers follow the family name).
     if (parts.size >= 3 && parts[0].equals("claude", ignoreCase = true) && parts.drop(2).all { p -> p.all(Char::isDigit) }) {

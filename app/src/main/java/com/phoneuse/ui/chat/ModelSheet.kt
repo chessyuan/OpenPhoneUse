@@ -78,6 +78,8 @@ data class ModelChoices(
     val fastSupported: Boolean = true,
     val listError: String? = null,
     val planUsage: Boolean = false,
+    /** Whether "자동" (follow the newest of the default's family) applies; an OpenAI-compatible server has no default. */
+    val autoSupported: Boolean = true,
 )
 
 /** The ModelSheet board: model presets + custom id, fast mode, reasoning effort. Changes apply at once. */
@@ -169,7 +171,8 @@ fun ModelSettingsContent(
                 }
             }
         }
-        val options = if (model in known) known else known + model
+        // A blank model (an OpenAI-compatible server before one is picked) is no row of its own.
+        val options = if (model in known || model.isBlank()) known else known + model
         for (id in options) {
             val on = id == model && !(onAuto != null && auto)
             Row(
@@ -242,7 +245,10 @@ fun ModelSettingsContent(
                         .padding(horizontal = 14.dp),
                     contentAlignment = Alignment.CenterStart,
                 ) {
-                    if (customText.isEmpty()) Text(tr("Model ID (e.g. ${choices.defaultModel})", "모델 ID (예: ${choices.defaultModel})"), fontSize = 14.sp, color = c.textSub)
+                    if (customText.isEmpty()) {
+                        val example = choices.defaultModel.ifBlank { null }
+                        Text(if (example != null) tr("Model ID (e.g. $example)", "모델 ID (예: $example)") else tr("Model ID", "모델 ID"), fontSize = 14.sp, color = c.textSub)
+                    }
                     BasicTextField(
                         customText,
                         { customText = it },

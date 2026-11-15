@@ -113,6 +113,10 @@ data class AccountInfo(
     val hasApiKey: Boolean = false,
     /** The sign-in was granted the ChatGPT plan's scope; without it it is only an identity. */
     val planEnabled: Boolean = false,
+    /** [AuthMode.COMPATIBLE]'s saved server; empty when none. */
+    val compatibleBaseUrl: String = "",
+    /** A model is chosen (or the server's one listed model is used); a compatible server has no default. */
+    val hasModel: Boolean = true,
 ) {
     /** The drawer's line under 설정. */
     val summary: String
@@ -121,6 +125,11 @@ data class AccountInfo(
             AuthMode.API_KEY -> if (hasApiKey) tr("Using API key", "API 키 사용 중") else tr("Enter an API key", "API 키를 넣어 주세요")
             AuthMode.CLAUDE, AuthMode.GROK, AuthMode.GEMINI -> ModelProviders.label(mode) + " · " +
                 if (hasApiKey) tr("Using API key", "API 키 사용 중") else tr("Enter an API key", "API 키를 넣어 주세요")
+            AuthMode.COMPATIBLE -> ModelProviders.label(mode) + " · " + when {
+                compatibleBaseUrl.isBlank() -> tr("Enter the server address", "서버 주소를 넣어 주세요")
+                !hasModel -> tr("Choose a model", "모델을 골라 주세요")
+                else -> com.phoneuse.app.CompatibleEndpoints.displayHost(compatibleBaseUrl)
+            }
         }
 }
 
@@ -228,7 +237,13 @@ fun SettingsScreen(
 
             Section("AI")
             Group {
-                ValueRow(tr("Default model", "기본 모델"), (if (modelAuto) tr("Auto · ", "자동 · ") else "") + modelDisplayName(model), onClick = onOpenModelSheet, first = true)
+                // An OpenAI-compatible server has no default to follow: until one is picked there is nothing to show.
+                val modelValue = when {
+                    model.isBlank() -> tr("Choose", "골라 주세요")
+                    modelAuto && account.mode != AuthMode.COMPATIBLE -> tr("Auto · ", "자동 · ") + modelDisplayName(model)
+                    else -> modelDisplayName(model)
+                }
+                ValueRow(tr("Default model", "기본 모델"), modelValue, onClick = onOpenModelSheet, first = true)
                 if (ModelProviders.supportsFast(account.mode)) SwitchRow(FAST_MODE_LABEL, tr("Faster answers, uses your plan or credits faster", "답이 빨라지고 요금제나 크레딧을 더 빨리 써요"), fast) { v -> scope.launch { settings.setFastMode(v) } }
                 ValueRow(REASONING_EFFORT_LABEL, EFFORT_OPTIONS.first { it.first == effort }.second, onClick = onOpenModelSheet)
                 SwitchRow(tr("Web search", "웹 검색"), tr("Looks things up on the web when needed and shows sources", "필요하면 웹에서 찾아보고 출처를 보여줘요"), webSearch) { v -> scope.launch { settings.setWebSearch(v) } }
@@ -722,7 +737,12 @@ private fun AccountCard(
             account.mode,
             choose,
         )
-        Segmented(listOf(AuthMode.CLAUDE, AuthMode.GROK, AuthMode.GEMINI).map { it to ModelProviders.label(it) }, account.mode, choose)
+        Segmented(
+            listOf(AuthMode.CLAUDE, AuthMode.GROK, AuthMode.GEMINI).map { it to ModelProviders.label(it) } +
+                (AuthMode.COMPATIBLE to tr("Other", "기타")),
+            account.mode,
+            choose,
+        )
         when (account.mode) {
             AuthMode.CHATGPT -> {
                 if (loginJob != null) {
@@ -809,6 +829,7 @@ private fun AccountCard(
                 }
                 error?.let { Text(it, fontSize = 12.5.sp, color = c.danger) }
             }
+            AuthMode.COMPATIBLE -> CompatibleServerFields(settings, account, scope, onAccountChanged)
             AuthMode.API_KEY, AuthMode.CLAUDE, AuthMode.GROK, AuthMode.GEMINI -> {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     val title = if (account.mode == AuthMode.API_KEY) tr("OpenAI API key", "OpenAI API 키") else ModelProviders.label(account.mode) + tr(" API key", " API 키")
@@ -850,6 +871,109 @@ private fun AccountCard(
         }
         // Board Settings: the way to the Usage screen.
         UsageSummary(onOpenUsage)
+    }
+}
+
+/** Settings for [AuthMode.COMPATIBLE]: a known server or any address, and its key (none for a local server). */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun CompatibleServerFields(settings: SettingsStore, account: AccountInfo, scope: CoroutineScope, onAccountChanged: () -> Unit) {
+    val c = pu
+    var urlText by rememberSaveable { mutableStateOf(account.compatibleBaseUrl) }
+    var keyText by rememberSaveable { mutableStateOf("") }
+    var saved by remember { mutableStateOf(false) }
+    var urlError by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        urlText = settings.compatibleBaseUrl.first()
+        keyText = settings.providerKey(AuthMode.COMPATIBLE).first()
+    }
+    val preset = com.phoneuse.app.CompatibleEndpoints.PRESETS.firstOrNull { it.baseUrl == urlText.trim() }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(tr("OpenAI-compatible API", "OpenAI 호환 API"), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = c.text)
+        Text(
+            tr(
+                "Any server with an OpenAI-style API: OpenRouter, Groq, Ollama on this phone and more. The model must support tool calling. If it can't read images, set what is sent to the model to text only.",
+                "OpenRouter, Groq, 이 폰의 Ollama처럼 OpenAI 방식 API를 쓰는 곳이면 연결할 수 있어요. 모델이 도구 호출을 지원해야 해요. 이미지를 못 읽는 모델이면 '모델에 보내는 화면 내용'을 텍스트만으로 바꿔 주세요.",
+            ),
+            fontSize = 12.5.sp, lineHeight = 18.sp, color = c.textSub,
+        )
+    }
+    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        for (p in com.phoneuse.app.CompatibleEndpoints.PRESETS) {
+            val on = p == preset
+            val chipShape = RoundedCornerShape(10.dp)
+            Text(
+                p.name,
+                Modifier
+                    .clip(chipShape)
+                    .background(if (on) c.accentSoft else androidx.compose.ui.graphics.Color.Transparent)
+                    .border(1.dp, if (on) c.accentBorder else c.inputBorder, chipShape)
+                    .clickable(role = Role.Button) {
+                        urlText = p.baseUrl
+                        saved = false
+                        urlError = null
+                    }
+                    .padding(horizontal = 12.dp, vertical = 7.dp),
+                fontSize = 13.5.sp, color = if (on) c.accentText else c.text2,
+            )
+        }
+    }
+    CompatibleField(urlText, { urlText = it; saved = false; urlError = null }, "https://…/v1", secret = false)
+    CompatibleField(
+        keyText, { keyText = it; saved = false },
+        if (preset?.needsKey == false) tr("API key (leave empty for a local server)", "API 키 (로컬 서버는 비워 두세요)") else tr("API key", "API 키"),
+        secret = true,
+    )
+    urlError?.let { Text(it, fontSize = 12.5.sp, color = c.danger) }
+    PuButton(if (saved) tr("Saved", "저장됨") else tr("Save", "저장"), {
+        when (val parsed = com.phoneuse.app.CompatibleEndpoints.parse(urlText)) {
+            is com.phoneuse.app.CompatibleEndpoints.Parsed.Ok -> scope.launch {
+                settings.setCompatibleBaseUrl(parsed.baseUrl)
+                settings.setProviderKey(AuthMode.COMPATIBLE, keyText)
+                urlText = parsed.baseUrl
+                saved = true
+                onAccountChanged()
+            }
+            com.phoneuse.app.CompatibleEndpoints.Parsed.NeedsHttps -> urlError = tr(
+                "Plain http works only for a server on this phone (localhost). Use https for other servers.",
+                "http 주소는 이 폰 안의 서버(localhost)만 쓸 수 있어요. 다른 서버는 https 주소를 넣어 주세요.",
+            )
+            com.phoneuse.app.CompatibleEndpoints.Parsed.Invalid -> urlError =
+                tr("Enter the server address, e.g. https://openrouter.ai/api/v1", "서버 주소를 넣어 주세요. 예: https://openrouter.ai/api/v1")
+        }
+    }, Modifier.fillMaxWidth(), height = 44.dp, radius = 12.dp, fontSize = 14)
+    if (account.compatibleBaseUrl.isNotBlank() && !account.hasModel) {
+        Text(
+            tr("Next, choose a model from the model menu on the chat screen.", "이제 대화 화면의 모델 메뉴에서 모델을 골라 주세요."),
+            fontSize = 12.5.sp, lineHeight = 18.sp, color = c.textSub,
+        )
+    }
+}
+
+@Composable
+private fun CompatibleField(value: String, onChange: (String) -> Unit, placeholder: String, secret: Boolean) {
+    val c = pu
+    val fieldShape = RoundedCornerShape(14.dp)
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(44.dp)
+            .clip(fieldShape)
+            .border(1.dp, c.inputBorder, fieldShape)
+            .padding(horizontal = 14.dp),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        if (value.isEmpty()) Text(placeholder, fontSize = 15.sp, color = c.textSub, maxLines = 1)
+        BasicTextField(
+            value,
+            onChange,
+            singleLine = true,
+            visualTransformation = if (secret) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
+            keyboardOptions = KeyboardOptions(keyboardType = if (secret) KeyboardType.Password else KeyboardType.Uri, autoCorrectEnabled = false),
+            textStyle = TextStyle(fontFamily = PlexSans, fontSize = 15.sp, color = c.text),
+            cursorBrush = SolidColor(c.accent),
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 

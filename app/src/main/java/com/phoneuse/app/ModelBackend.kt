@@ -57,4 +57,8 @@ internal suspend fun SettingsStore.chosenBackend(planAuth: ModelAuth): ModelBack
     AuthMode.GROK, AuthMode.GEMINI -> providerKey(mode).first().takeIf { it.isNotBlank() }?.let { key ->
         ModelBackend.Chat(mode, ModelProviders.endpoint(mode)!!, key)
     }
+    // A local server may take no key; a server and a model are what it needs.
+    AuthMode.COMPATIBLE -> compatibleBaseUrl.first().takeIf { it.isNotBlank() && model.first().isNotBlank() }?.let { base ->
+        ModelBackend.Chat(mode, ModelProviders.compatibleEndpoint(base), providerKey(mode).first())
+    }
 }

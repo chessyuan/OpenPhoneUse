@@ -11,6 +11,7 @@ object ModelProviders {
     const val KEY_CLAUDE = "claude_api_key"
     const val KEY_XAI = "xai_api_key"
     const val KEY_GEMINI = "gemini_api_key"
+    const val KEY_COMPATIBLE = "compatible_api_key"
 
     /** Fallbacks until the user picks from the provider's own list. */
     const val GROK_DEFAULT = "grok-4"
@@ -26,6 +27,10 @@ object ModelProviders {
         else -> null
     }
 
+    /** The Chat Completions backend of [AuthMode.COMPATIBLE] at the base URL the user saved. */
+    fun compatibleEndpoint(baseUrl: String): ChatCompletionsClient.Endpoint =
+        ChatCompletionsClient.Endpoint(baseUrl, tr("Check the API key for this server", "이 서버의 API 키를 확인해 주세요"))
+
     /** The encrypted secret that holds this provider's API key; null for the ChatGPT sign-in. */
     fun secretName(mode: AuthMode): String? = when (mode) {
         AuthMode.CHATGPT -> null
@@ -33,6 +38,7 @@ object ModelProviders {
         AuthMode.CLAUDE -> KEY_CLAUDE
         AuthMode.GROK -> KEY_XAI
         AuthMode.GEMINI -> KEY_GEMINI
+        AuthMode.COMPATIBLE -> KEY_COMPATIBLE
     }
 
     /** Both OpenAI modes share one chosen model; each other provider keeps its own. */
@@ -41,6 +47,7 @@ object ModelProviders {
         AuthMode.CLAUDE -> MODEL_CLAUDE
         AuthMode.GROK -> MODEL_GROK
         AuthMode.GEMINI -> MODEL_GEMINI
+        AuthMode.COMPATIBLE -> MODEL_COMPATIBLE
     }
 
     fun defaultModel(mode: AuthMode): String = when (mode) {
@@ -48,6 +55,8 @@ object ModelProviders {
         AuthMode.CLAUDE -> ClaudeClient.DEFAULT_MODEL
         AuthMode.GROK -> GROK_DEFAULT
         AuthMode.GEMINI -> GEMINI_DEFAULT
+        // No id fits every server: the one model a server lists, or the one the user picks (see [upgrades]).
+        AuthMode.COMPATIBLE -> ""
     }
 
     /** [defaultModel], or the newer one of its family the provider's own list showed last (see [ModelUpgrade]). */
@@ -58,7 +67,7 @@ object ModelProviders {
     fun lightModel(mode: AuthMode): String? = when (mode) {
         AuthMode.CHATGPT, AuthMode.API_KEY -> SettingsStore.ROUTINE_LIGHT_MODEL
         AuthMode.CLAUDE -> ClaudeClient.LIGHT_MODEL
-        AuthMode.GROK, AuthMode.GEMINI -> null
+        AuthMode.GROK, AuthMode.GEMINI, AuthMode.COMPATIBLE -> null
     }
 
     /** [lightModel], or the newer one of its family the provider's own list showed last. */
@@ -67,20 +76,22 @@ object ModelProviders {
 
     /** The newest default and light model [listed] holds for [mode]; null where nothing is newer than the built-in. */
     fun upgrades(mode: AuthMode, listed: List<String>): Pair<String?, String?> =
-        ModelUpgrade.newest(defaultModel(mode), listed) to lightModel(mode)?.let { ModelUpgrade.newest(it, listed) }
+        // A server listing a single model (a local Ollama or LM Studio with one loaded) needs no picking.
+        if (mode == AuthMode.COMPATIBLE) listed.singleOrNull() to null
+        else ModelUpgrade.newest(defaultModel(mode), listed) to lightModel(mode)?.let { ModelUpgrade.newest(it, listed) }
 
     /** Ids offered before (and beside) the provider's own list. */
     fun presets(mode: AuthMode): List<String> = when (mode) {
         AuthMode.CHATGPT, AuthMode.API_KEY -> MODEL_PRESETS
         AuthMode.CLAUDE -> ClaudeClient.MODELS
-        AuthMode.GROK, AuthMode.GEMINI -> emptyList()
+        AuthMode.GROK, AuthMode.GEMINI, AuthMode.COMPATIBLE -> emptyList()
     }
 
     /** Fast mode is OpenAI's priority tier: the ChatGPT plan and an API key can ask for it, other providers have none. */
     fun supportsFast(mode: AuthMode): Boolean = mode == AuthMode.CHATGPT || mode == AuthMode.API_KEY
 
     /** Hosted web search is OpenAI's and Claude's. */
-    fun supportsWebSearch(mode: AuthMode): Boolean = mode != AuthMode.GROK && mode != AuthMode.GEMINI
+    fun supportsWebSearch(mode: AuthMode): Boolean = mode == AuthMode.CHATGPT || mode == AuthMode.API_KEY || mode == AuthMode.CLAUDE
 
     fun chosenModel(prefs: Preferences, mode: AuthMode): String =
         prefs[modelPref(mode)]?.takeIf { it.isNotBlank() } ?: defaultModel(prefs, mode)
@@ -102,17 +113,20 @@ object ModelProviders {
         AuthMode.CLAUDE -> "Claude"
         AuthMode.GROK -> "Grok"
         AuthMode.GEMINI -> "Gemini"
+        AuthMode.COMPATIBLE -> tr("OpenAI-compatible", "OpenAI 호환")
     }
 
     /**
      * The model ids [mode]'s own models endpoint lists for [apiKey], chat models only; empty for OpenAI (its
-     * presets are the list). Throws [com.phoneuse.model.ModelException] on a bad key or a network error.
+     * presets are the list). [baseUrl] is [AuthMode.COMPATIBLE]'s server. Throws [com.phoneuse.model.ModelException]
+     * on a bad key or a network error.
      */
-    suspend fun listModels(mode: AuthMode, apiKey: String, http: okhttp3.OkHttpClient): List<String> =
+    suspend fun listModels(mode: AuthMode, apiKey: String, http: okhttp3.OkHttpClient, baseUrl: String = ""): List<String> =
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             when (mode) {
                 AuthMode.CLAUDE -> ClaudeClient.listModels(ClaudeClient.sdkClient(apiKey))
                 AuthMode.GROK, AuthMode.GEMINI -> ChatCompletionsClient.listModels(endpoint(mode)!!, apiKey, http).filter(::chatCapable)
+                AuthMode.COMPATIBLE -> ChatCompletionsClient.listModels(compatibleEndpoint(baseUrl), apiKey, http).filter(::chatCapable)
                 // [apiKey] is the plan sign-in's access token: the account's own catalog, in the server's order.
                 AuthMode.CHATGPT -> com.phoneuse.auth.PlanModels.list(http, apiKey)
                 AuthMode.API_KEY -> com.phoneuse.auth.PlanModels.list(http, apiKey).filter(::openAiChatModel).sorted()
@@ -141,6 +155,7 @@ object ModelProviders {
     private val MODEL_CLAUDE = stringPreferencesKey("model_claude")
     private val MODEL_GROK = stringPreferencesKey("model_grok")
     private val MODEL_GEMINI = stringPreferencesKey("model_gemini")
+    private val MODEL_COMPATIBLE = stringPreferencesKey("model_compatible")
 
     /** Where the newer default and light model found in [mode]'s own list are kept. */
     fun autoPref(mode: AuthMode): Preferences.Key<String> = stringPreferencesKey("auto_model_" + mode.name.lowercase())

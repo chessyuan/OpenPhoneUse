@@ -23,7 +23,8 @@ import kotlinx.coroutines.withContext
 
 private val Context.dataStore by preferencesDataStore(name = "settings")
 
-enum class AuthMode { CHATGPT, API_KEY, CLAUDE, GROK, GEMINI }
+/** The model provider; [COMPATIBLE] is any OpenAI-compatible server at a base URL (see [CompatibleEndpoints]). */
+enum class AuthMode { CHATGPT, API_KEY, CLAUDE, GROK, GEMINI, COMPATIBLE }
 
 enum class ReasoningEffort { LOW, MEDIUM, HIGH }
 
@@ -104,6 +105,23 @@ class SettingsStore internal constructor(
     fun providerKey(mode: AuthMode): Flow<String> {
         val name = ModelProviders.secretName(mode) ?: return flowOf("")
         return if (name == KEY_API) apiKey else store.data.map { prefs -> prefs[secretKey(name)]?.let { secrets.open(it) } ?: "" }
+    }
+
+    /** [AuthMode.COMPATIBLE]'s server, a base URL ending with a slash; empty until one is saved. */
+    val compatibleBaseUrl: Flow<String> = store.data.map { it[COMPATIBLE_BASE_URL] ?: "" }
+
+    /**
+     * Saves [baseUrl] (already [CompatibleEndpoints.parse]d). Another server has other model ids, so the model
+     * picked for the old one and the one its list offered are dropped.
+     */
+    suspend fun setCompatibleBaseUrl(baseUrl: String) {
+        store.edit { prefs ->
+            if (prefs[COMPATIBLE_BASE_URL] == baseUrl) return@edit
+            prefs[COMPATIBLE_BASE_URL] = baseUrl
+            prefs.remove(ModelProviders.modelPref(AuthMode.COMPATIBLE))
+            prefs.remove(ModelProviders.autoPref(AuthMode.COMPATIBLE))
+            prefs.remove(ModelProviders.autoLightPref(AuthMode.COMPATIBLE))
+        }
     }
 
     suspend fun setProviderKey(mode: AuthMode, v: String) {
@@ -408,6 +426,7 @@ class SettingsStore internal constructor(
         private val PLAN_WELCOME = booleanPreferencesKey("plan_welcome_shown")
         private val PLAN_PAUSED_UNTIL = longPreferencesKey("plan_paused_until")
         private val AUTH_MODE = stringPreferencesKey("auth_mode")
+        private val COMPATIBLE_BASE_URL = stringPreferencesKey("compatible_base_url")
         private val FAST_MODE = booleanPreferencesKey("fast_mode")
         private val REASONING = stringPreferencesKey("reasoning_effort")
         private val THEME = stringPreferencesKey("theme_mode")
